@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     top_p: float = 0.9
     max_tokens: int = 700
     retrieval_k: int = 4
+    agent_max_steps: int = 5
+    agent_context_chars: int = 6000
     rate_limit_per_minute: int = 30
     cache_ttl_seconds: int = 300
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

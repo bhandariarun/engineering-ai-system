@@ -6,12 +6,18 @@ flowchart LR
     UI --> API[FastAPI API]
     API --> Limit[Rate limiter]
     Limit --> Cache[Response cache]
-    Cache --> RAG[RAG retriever]
+    Cache --> Agent[Bounded single-agent loop]
+    Agent --> Decide{Model chooses next action}
+    Decide -->|search| RAG[RAG retriever]
     RAG --> Index[(Local TF-IDF index)]
-    RAG --> Provider[OpenAI-compatible provider]
+    RAG -->|evidence| Agent
+    Decide -->|tool| Tools[Allow-listed tools]
+    Tools -->|result| Agent
+    Decide -->|clarify| User
+    Decide -->|final| Response[Answer + citations]
+    Agent --> Provider[OpenAI-compatible provider]
     Provider --> OpenAI[OpenAI / Azure / vLLM]
-    Provider --> Tools[Safe function tools]
-    Provider -. failure .-> Fallback[Retrieval-grounded fallback]
+    Agent -. max steps or failure .-> Fallback[Explicit degraded response]
     Docs[Markdown and text files] --> Ingest[Chunking and ingestion]
     Ingest --> Index
 ```
@@ -19,10 +25,10 @@ flowchart LR
 ## Request flow
 
 1. The API validates the request and applies a per-client sliding-window rate limit.
-2. The service checks its TTL cache, retrieves the most relevant document chunks, and builds a grounded context.
-3. The provider sends a structured JSON request with temperature, top-p, and function definitions. Transient provider failures retry with exponential backoff.
-4. Tool calls are allow-listed and evaluated with safe functions. Provider or tool failures degrade to a context response rather than exposing an exception.
-5. The response includes citations, provider state, cache state, and tool results for observability.
+2. The service checks its TTL cache and starts a bounded agent loop with compact evidence and recent history.
+3. The provider returns the next structured action. Search and tool results are fed into the next decision; the model can search again, use a tool, clarify, or finalize.
+4. Retrieval results are capped for model context but retained for citations. Tool calls are allow-listed and provider/tool failures become explicit degraded responses.
+5. The response includes citations, tool results, iteration count, token usage, provider state, cache state, and stop reason for observability.
 
 ## Production evolution
 
