@@ -1,5 +1,6 @@
 from app.config import Settings
 from app.service import AssistantService
+from tenacity import retry, stop_after_attempt
 
 
 class ScriptedProvider:
@@ -12,6 +13,14 @@ class ScriptedProvider:
     def agent_step(self, question, evidence, history):
         self.calls.append({"question": question, "evidence": evidence, "history": history})
         return next(self.decisions), 17
+
+
+class UnavailableProvider:
+    name = "openai-compatible"
+
+    @retry(stop=stop_after_attempt(1))
+    def agent_step(self, question, evidence, history):
+        raise RuntimeError("provider unavailable")
 
 
 def make_service(provider):
@@ -56,3 +65,12 @@ def test_agent_failure_is_explicit_and_bounded():
     assert response.stop_reason == "max_steps"
     assert response.iterations == 5
     assert "step limit" in response.answer
+
+
+def test_provider_retry_falls_back_to_offline_agent():
+    response = make_service(UnavailableProvider()).ask("How does the system handle failures?")
+
+    assert response.degraded is True
+    assert response.provider == "offline"
+    assert response.citations
+    assert response.stop_reason == "completed"

@@ -3,6 +3,8 @@ import json
 import time
 from typing import Any
 
+from tenacity import RetryError
+
 from .config import Settings
 from .providers import ModelProvider
 from .rag import Retriever
@@ -39,7 +41,14 @@ class AssistantService:
         try:
             for _ in range(self.settings.agent_max_steps):
                 iterations += 1
-                decision, tokens = self.provider.agent_step(question, evidence[-self.settings.agent_context_chars:], history[-4:])
+                try:
+                    decision, tokens = self.provider.agent_step(question, evidence[-self.settings.agent_context_chars:], history[-4:])
+                except RetryError:
+                    if self.provider.name == "offline":
+                        raise
+                    self.provider = ModelProvider(Settings(openai_api_key=None))
+                    degraded = True
+                    decision, tokens = self.provider.agent_step(question, evidence[-self.settings.agent_context_chars:], history[-4:])
                 total_tokens += tokens
                 action = decision.get("action")
                 if action == "search":
@@ -94,5 +103,6 @@ class AssistantService:
             token_usage=total_tokens,
             stop_reason=stop_reason,
         )
-        self.cache[cache_key] = (time.time(), response)
+        if not degraded:
+            self.cache[cache_key] = (time.time(), response)
         return response
