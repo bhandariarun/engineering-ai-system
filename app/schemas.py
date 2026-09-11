@@ -20,6 +20,9 @@ class AssistantResponse(BaseModel):
     provider: str
     cached: bool = False
     degraded: bool = False
+    iterations: int = 1
+    token_usage: int = 0
+    stop_reason: str = "completed"
 
 
 class IngestResponse(BaseModel):
