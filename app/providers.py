@@ -1,11 +1,36 @@
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from .config import Settings
+
+
+def load_prompt_templates() -> dict[str, str]:
+    """Load versioned prompt templates used for agent tracing and regression evaluation."""
+    prompt_dir = Path(__file__).resolve().parent.parent / "prompts"
+    templates: dict[str, str] = {}
+    if prompt_dir.exists():
+        for path in sorted(prompt_dir.glob("*.txt")):
+            key = path.stem
+            templates[key] = path.read_text(encoding="utf-8").strip()
+    if templates:
+        return templates
+
+    return {
+        "prompt_v1": """
+You are a careful research assistant. Search before finalizing. Use the smallest query that can answer the user question, prefer a final answer only when the evidence is sufficient, and clearly explain when information is missing.
+""".strip(),
+        "prompt_v2": """
+You are a bounded research agent. Return JSON with action, query, answer, and tool_calls. Use search when evidence is empty. After each search, decide whether more evidence is needed; if yes, search again with a narrower or alternative query. Use tool only for deterministic calculations or time checks. Use final only when the answer is supported by retrieved evidence or when the evidence is unavailable.
+""".strip(),
+        "prompt_v3": """
+You are a production-grade research agent. Verify claims with evidence before finalizing. Prefer precise search terms, keep the evidence brief but sufficient, and stop only after a verified answer or an explicit explanation that the task cannot be completed. Rely on tool calls for calculations and time lookups, and record why each step was chosen so that failures are diagnosable.
+""".strip(),
+    }
 
 
 class ModelProvider:
@@ -16,6 +41,7 @@ class ModelProvider:
         self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) if settings.openai_api_key else None
         if self.client:
             self.name = "openai-compatible"
+        self.prompt_version = settings.prompt_version
 
     @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(min=0.2, max=2))
     def answer(self, question: str, context: str) -> tuple[str, list[dict[str, Any]]]:
@@ -57,7 +83,7 @@ class ModelProvider:
                 {"type": "function", "function": {"name": "current_time", "description": "Get the current UTC time", "parameters": {"type": "object", "properties": {}}}},
             ],
             messages=[
-                {"role": "system", "content": "You are a bounded research agent. Return JSON with action, query, answer, and tool_calls. action must be one of search, tool, clarify, final. Start with search when evidence is empty. After a search, assess whether evidence is sufficient; search again with a narrower or alternate query when needed. Use tool only when it adds evidence. Use clarify when the request is ambiguous. Use final only when supported by evidence or when explaining that evidence is unavailable."},
+                {"role": "system", "content": self._system_prompt_for_version(self.prompt_version)},
                 {"role": "user", "content": json.dumps({"question": question, "evidence": evidence, "history": history})},
             ],
         )
@@ -67,6 +93,11 @@ class ModelProvider:
         payload["tool_calls"] = tool_calls or payload.get("tool_calls", [])
         usage = getattr(response, "usage", None)
         return payload, int(getattr(usage, "total_tokens", 0) or 0)
+
+    @staticmethod
+    def _system_prompt_for_version(version: str) -> str:
+        templates = load_prompt_templates()
+        return templates.get(version, templates.get("prompt_v2", "Return JSON with action, query, answer, and tool_calls."))
 
     @staticmethod
     def _offline_answer(question: str, context: str) -> str:

@@ -1,0 +1,55 @@
+[
+  {
+    "question": "How do I run locally?",
+    "answer": "Based on the indexed project notes: Operations Run the API with `uvicorn app.main:app --host 0.0.0.0 --port 8000` and the UI with `streamlit run app/ui.py`. Docker Compose starts both services. Architecture The system has a Streamlit client, a FastAPI service, a retrieval layer, and an OpenAI-compatible model provider. Retrieval uses local TF-IDF vectors by default so the demo remains runnable offline. In production, the provider can point to OpenAI, Azure OpenAI, vLLM, or another compatible endpoint.",
+    "provider": "offline",
+    "degraded": true,
+    "iterations": 2,
+    "token_usage": 0,
+    "stop_reason": "completed",
+    "tool_calls": [],
+    "citations": [
+      {
+        "source": "data/engineering_ai.md",
+        "chunk_id": "engineering_ai.md:0",
+        "score": 0.0615
+      }
+    ]
+  },
+  {
+    "question": "Calculate 25 * 4.",
+    "answer": "The result is 100.",
+    "provider": "offline",
+    "degraded": true,
+    "iterations": 2,
+    "token_usage": 0,
+    "stop_reason": "completed",
+    "tool_calls": [
+      {
+        "name": "calculator",
+        "arguments": {
+          "expression": "25 * 4"
+        },
+        "result": "100"
+      }
+    ],
+    "citations": []
+  },
+  {
+    "question": "How does this system handle provider failures?",
+    "answer": "Based on the indexed project notes: Reliability The API applies an in-process rate limit, retries transient provider errors, caches successful responses, and returns a retrieval-grounded degraded response when no model provider is configured or the provider fails. Architecture The system has a Streamlit client, a FastAPI service, a retrieval layer, and an OpenAI-compatible model provider. Retrieval uses local TF-IDF vectors by default so the demo remains runnable offline. In production, the provider can point to OpenAI, Azure OpenAI, vLLM, or another compatible endpoint.",
+    "provider": "offline",
+    "degraded": true,
+    "iterations": 2,
+    "token_usage": 0,
+    "stop_reason": "completed",
+    "tool_calls": [],
+    "citations": [
+      {
+        "source": "data/engineering_ai.md",
+        "chunk_id": "engineering_ai.md:0",
+        "score": 0.1861
+      }
+    ]
+  }
+]

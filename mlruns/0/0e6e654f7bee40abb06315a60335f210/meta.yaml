@@ -1,0 +1,15 @@
+artifact_uri: file:///home/arun/Office/engineering-ai-system/mlruns/0/0e6e654f7bee40abb06315a60335f210/artifacts
+end_time: 1789790044237
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 0e6e654f7bee40abb06315a60335f210
+run_name: 'random_forest-{''n_estimators'': 150, ''max_depth'': 8}'
+run_uuid: 0e6e654f7bee40abb06315a60335f210
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1789790036354
+status: 3
+tags: []
+user_id: arun

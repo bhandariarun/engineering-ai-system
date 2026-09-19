@@ -1,0 +1,15 @@
+artifact_uri: file:///home/arun/Office/engineering-ai-system/mlruns/0/7cd6132d067641eeaa4130ba4b92b95f/artifacts
+end_time: 1789815365831
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 7cd6132d067641eeaa4130ba4b92b95f
+run_name: 'logistic_regression-{''C'': 0.5, ''penalty'': ''l2''}'
+run_uuid: 7cd6132d067641eeaa4130ba4b92b95f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1789815359968
+status: 3
+tags: []
+user_id: arun

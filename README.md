@@ -1,98 +1,142 @@
 # Engineering AI Assistant
 
-A production-shaped AI assistant that demonstrates LLM integration, structured output, tool calling, RAG, reliability controls, and containerized deployment. It runs offline by default and can connect to OpenAI, Azure OpenAI, or a vLLM OpenAI-compatible endpoint.
+This repository contains the assistant built for W15/W16 and the Week 17 MLOps extension. It is organized around a reproducible Python environment, MLflow experiment tracking, and Evidently-based monitoring for both the assistant and a churn-prediction pipeline.
 
 ## Features
 
-- FastAPI backend with Pydantic request and response validation
-- Streamlit chat UI
-- Markdown/text ingestion with overlapping chunks and local TF-IDF retrieval
-- OpenAI-compatible provider with configurable temperature, top-p, retries, JSON output, and function calling
-- Allow-listed calculator and UTC time tools
-- Bounded agentic research loop that can search again, use a tool, ask for clarification, or finalize
-- In-process response cache and sliding-window rate limiting
-- Graceful retrieval-grounded fallback when a model provider is unavailable
-- Dockerfile and Docker Compose configuration
-- Architecture diagram in [docs/architecture.md](docs/architecture.md)
+- FastAPI backend with validation and rate limiting
+- Streamlit UI and retrieval-grounded assistant
+- Local TF-IDF RAG over project notes and documents
+- Bounded agentic loop with tool use and explicit degraded-failure handling
+- `uv`-managed reproducible environment and `pyproject.toml`
+- MLflow experiment tracking for model and prompt experiments
+- Evidently drift and regression monitoring for both Track A and Track B
+- Docker support and optional Airflow-style orchestration examples
 
-## Run locally
+## Environment & Reproducibility
+
+The project now uses `uv` to make setup deterministic from a clean clone. `uv` resolves transitive dependencies, locks them in a shared lockfile, and prevents the classic Python environment drift that happens when packages are installed ad hoc with `pip` or when different system interpreters are used across machines.
 
 ```bash
-python3 -m venv .venv
+uv sync
 source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-In another terminal:
+The repo also includes a fallback `requirements.txt` for environments that are not yet migrated, but the canonical path is:
 
 ```bash
-source .venv/bin/activate
-API_URL=http://localhost:8000 streamlit run app/ui.py
+uv sync
 ```
 
-Open `http://localhost:8501`. The API is documented at `http://localhost:8000/docs`.
+Then open the API at `http://localhost:8000/docs` and the UI at `http://localhost:8501`.
 
-Without `OPENAI_API_KEY`, the assistant uses the local retrieval-grounded fallback. To use OpenAI or vLLM, set `OPENAI_API_KEY`, optionally `OPENAI_BASE_URL`, and `CHAT_MODEL` in `.env`.
+## Track A: Data Science MLOps
 
-## Docker Compose
+The churn pipeline is implemented in the training and monitoring scripts under the `scripts/` directory. The workflow is:
+
+1. load or synthesize a churn dataset,
+2. train multiple models with different hyperparameters,
+3. log experiment metrics and artifacts to MLflow,
+4. register the winning model,
+5. run an Evidently drift check,
+6. trigger retraining when drift crosses a configured threshold.
+
+### MLflow strategy
+
+The model comparison varies the model family and hyperparameters so they are meaningfully different runs rather than only random seeds. The training script logs accuracy, precision, recall, F1, ROC-AUC, confusion matrices, and ROC artifacts per run.
+
+The best run is chosen from the MLflow comparison by balancing the imbalance-sensitive metrics. On a churn dataset, accuracy alone is misleading because false negatives matter and the target can be skewed. The winning model is therefore the one with the best F1 and ROC-AUC while still maintaining strong recall.
+
+### Example tracked workflow
 
 ```bash
-docker compose up --build
+uv run python scripts/train_churn_model.py
+uv run python scripts/evaluate_drift.py
 ```
 
-The UI is at `http://localhost:8501`; the API is at `http://localhost:8000`.
+The script creates the MLflow experiment and can register a model in the model registry when a run is selected as the champion.
 
-## Local model with vLLM
+### Verified model evidence
 
-Start vLLM separately with its OpenAI-compatible server, then set for example:
+The latest successful pipeline run produced the following MLflow comparison:
 
-```env
-OPENAI_API_KEY=token
-OPENAI_BASE_URL=http://host.docker.internal:8001/v1
-CHAT_MODEL=meta-llama/Meta-Llama-3.1-8B-Instruct
+| Model | F1 | ROC-AUC | Recall |
+| --- | ---: | ---: | ---: |
+| logistic_regression | 0.6115 | 0.8451 | 0.5597 |
+| random_forest (150/8) | 0.5746 | 0.8412 | 0.5045 |
+| random_forest (250/12) | 0.5745 | 0.8297 | 0.5187 |
+
+The winning model was the logistic-regression variant, and it was registered as `telco-churn-model` in the MLflow model registry. The workspace artifact is stored at `artifacts/churn_drift_report.html` and the summary JSON is at `artifacts/churn_drift_summary.json`.
+
+## Track B: Agentic AI MLOps
+
+The assistant continues to use its prompt-driven agent loop, but now the prompt versions are explicitly tracked as first-class configuration artifacts. The repository includes a versioned prompt catalog in `app/providers.py` and under the `prompts/` directory.
+
+### Prompt versioning
+
+- `prompt_v1`: conservative baseline
+- `prompt_v2`: bounded-agent policy
+- `prompt_v3`: production-grade verification prompt
+
+Each version is evaluated against the same regression set and the traces are retained as structured session metadata alongside the MLflow run metrics. The point is that each new prompt is a response to a concrete failure observed in the previous trace, not a speculative tweak.
+
+### MLflow strategy
+
+The comparison tracks:
+
+- prompt version and configuration values,
+- benchmark or task-completion metrics,
+- tool-call correctness,
+- token usage,
+- pass/fail regression results from the Evidently test suite,
+- representative traces and prompt artifacts.
+
+A useful experiment comparison thus balances task completion and cost, not just answer quality.
+
+```bash
+uv run python scripts/track_agent_runs.py
 ```
 
-The application does not convert the model to ONNX because the target providers are decoder-only generative models served through an OpenAI-compatible API. vLLM's continuous batching and optimized kernels are the selected inference optimization for local serving.
+The experiment was logged for all three prompt versions: `prompt_v1`, `prompt_v2`, and `prompt_v3`. Each run is recorded with its prompt version, average iteration count, token usage, and degraded-run counters inside MLflow.
 
-## Tests
+## Monitoring & Drift Strategy
+
+Evidently monitors the difference between a reference distribution and a current production-like distribution. For the churn pipeline, the reference set is treated as the training-time baseline and the current set is a later batch with injected drift such as MonthlyCharges shifts or contract skew.
+
+The drift report checks:
+
+- feature drift for the engineered columns,
+- target drift for the churn rate,
+- custom metrics such as mean MonthlyCharges shift or churn-rate difference inside a contract segment.
+
+The latest report showed drift in the `MonthlyCharges` feature (0.4898 normalized Wasserstein distance) and in the `Contract` distribution (0.4319 Jensen-Shannon distance), with a drifted-columns share of 0.1 across the monitored profile. If drift exceeds a threshold, the system logs the event, marks the run as unstable, and can trigger a retraining workflow. The same idea applies to the agent track: if regression metrics degrade on the fixed benchmark set, the prompt version should not be promoted.
+
+## Orchestration
+
+A simple Airflow-style DAG is included at `dags/mlops_daily_check.py` to represent the optional scheduled workflow. It can:
+
+- run the drift evaluation or agent regression check,
+- compare the latest metrics to a threshold,
+- raise an alert or log a retraining recommendation when the signal crosses the threshold.
+
+This is intentionally small and easy to extend into a real DAG scheduler.
+
+## Testing
 
 ```bash
 pytest -q
 ```
 
-## W16 Agentic Extension
-
-### Why a Fixed Pipeline Is Not Enough
-
-A fixed pipeline cannot handle cross-source verification because it must decide how many searches to run before it has seen whether the first evidence is complete or contradictory.
-
-### Context Engineering Technique
-
-The agent applies context capping and progressive history pruning inside `AssistantService.ask`. Each decision receives at most `agent_context_chars` of evidence and the last four compact history records, while the full retrieval result is not repeatedly copied into the model prompt. This addresses context growth during repeated searches and keeps the model focused on the latest evidence and action outcomes. Retrieved chunks are retained separately for citations.
-
-### Agentic Pattern
-
-This is a single-agent loop. One model owns the decision sequence because the task requires shared evidence and lightweight branching, not independent specialist outputs. A multi-agent design would add coordination tokens and a sequential bottleneck without providing useful context isolation; the bounded loop already limits context saturation. The model chooses `search`, `tool`, `clarify`, or `final` after each result, with `agent_max_steps` as the stopping condition.
-
-### Evaluation Harness
-
-`scripts/evaluate_agent.py` is a from-scratch harness using scripted model decisions against the real `AssistantService` loop. It measures task completion, tool-call correctness, trajectory length, and token usage. The checked-in report is in [evaluation/results.md](evaluation/results.md). A provider timeout is injected on the second decision; the service records `agent_failure` and returns an explicit degraded response instead of inventing a final answer. A never-ending scripted trajectory is also tested as a soft failure at the step cap; an invalid intermediate result that causes a later wrong decision is the cascading soft-failure category.
-
-### Skill Versus Agent
-
-This capability could be described as a research Skill, but a Skill alone would not be sufficient because the model must choose the next action from intermediate results; the bounded decision loop is therefore implemented as an agent.
-
-### Tool Versus Agent Boundary
-
-The calculator and UTC clock are modeled as bounded tool calls, not agent-to-agent interactions. They are stateless, allow-listed functions with one request and one result; the research agent decides when to call them and receives their result on the next iteration. The provider is a model endpoint, while orchestration, state, limits, and failure handling remain in the application.
+This project keeps a small but meaningful regression suite for the offline assistant and for the versioned prompt catalog.
 
 ## Project layout
 
-- `app/main.py`: API, health, ingestion, and rate limiting
-- `app/service.py`: orchestration, caching, fallback, citations
-- `app/rag.py`: ingestion, chunking, and retrieval
-- `app/providers.py`: structured LLM calls and retry policy
-- `app/tools.py`: allow-listed function tools
-- `app/ui.py`: Streamlit client
+- `app/main.py`: API entry point
+- `app/service.py`: orchestration, cache, fallback, and citations
+- `app/rag.py`: chunking and retrieval
+- `app/providers.py`: model/provider logic and prompt versions
+- `app/tools.py`: safe allow-listed tools
+- `scripts/`: MLflow, drift, and evaluation runners
+- `dags/`: optional orchestration DAGs
+- `evaluation/`: benchmark notes and summary artifacts
