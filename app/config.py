@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     chat_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
+    prompt_version: str = "prompt_v2"
+    mlflow_tracking_uri: str = "file:./mlruns"
     temperature: float = 0.2
     top_p: float = 0.9
     max_tokens: int = 700

@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1789790175943
+current_stage: Production
+description: null
+last_updated_timestamp: 1789790175952
+name: telco-churn-model
+run_id: 049bd0ff7d3342ff96f94f058790c5ff
+run_link: null
+source: file:///home/arun/Office/engineering-ai-system/mlruns/0/049bd0ff7d3342ff96f94f058790c5ff/artifacts/model
+status: READY
+status_message: null
+storage_location: file:///home/arun/Office/engineering-ai-system/mlruns/0/049bd0ff7d3342ff96f94f058790c5ff/artifacts/model
+user_id: null
+version: 1

@@ -1,0 +1,15 @@
+artifact_uri: file:///home/arun/Office/engineering-ai-system/mlruns/0/ad2af3d95a734feeb423d0e0c9cd824f/artifacts
+end_time: 1789790334433
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: ad2af3d95a734feeb423d0e0c9cd824f
+run_name: agent-prompt_v2
+run_uuid: ad2af3d95a734feeb423d0e0c9cd824f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1789790318398
+status: 3
+tags: []
+user_id: arun
